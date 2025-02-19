@@ -8,60 +8,49 @@ import (
 	"sync"
 )
 
-var storage = NewMemStorage()
-
-type MemStorageImpl interface {
-	UpdateGauge(name string, value float64)
-	UpdateCounter(name string, value int64)
-	GetGauge(name string) float64
-	GetCounter(name string) int
-}
 type MemStorage struct {
-	mu      sync.Mutex
-	gauge   map[string]float64
-	counter map[string]int64
+	mu       sync.Mutex
+	gauges   map[string]float64
+	counters map[string]int64
 }
 
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
-		gauge:   make(map[string]float64),
-		counter: make(map[string]int64),
+		gauges:   make(map[string]float64),
+		counters: make(map[string]int64),
 	}
 }
 
 func (s *MemStorage) UpdateGauge(name string, value float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.gauge[name] = value
+	s.gauges[name] = value
 }
+
 func (s *MemStorage) UpdateCounter(name string, value int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.counter[name] += value
+	s.counters[name] += value
 }
-func (s *MemStorage) GetGauge(name string) float64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.gauge[name]
-}
-func (s *MemStorage) GetCounter(name string) int64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.counter[name]
-}
+
+var storage = NewMemStorage()
+
 func updateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
 	}
-	pathParts := strings.Split(r.URL.Path, "/")
 
-	if len(pathParts) != 4 {
+	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(pathParts) != 4 || pathParts[0] != "update" {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
-	metricType := pathParts[2]
-	metricName := pathParts[3]
-	metricValue := pathParts[4]
+
+	metricType := pathParts[1]
+	metricName := pathParts[2]
+	metricValue := pathParts[3]
+
 	if metricName == "" {
 		http.Error(w, "Metric name required", http.StatusNotFound)
 		return
@@ -76,26 +65,23 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		storage.UpdateGauge(metricName, value)
 		w.WriteHeader(http.StatusOK)
-		return
 
 	case "counter":
-		value, err := strconv.Atoi(metricValue)
+		value, err := strconv.ParseInt(metricValue, 10, 64)
 		if err != nil {
 			http.Error(w, "Invalid value", http.StatusBadRequest)
+			return
 		}
-		storage.UpdateCounter(metricName, int64(value))
+		storage.UpdateCounter(metricName, value)
 		w.WriteHeader(http.StatusOK)
-		return
+
 	default:
-		http.Error(w, "Bad metric", http.StatusBadRequest)
-		return
+		http.Error(w, "Bad metric type", http.StatusBadRequest)
 	}
 }
+
 func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/update/", updateHandler)
-	err := http.ListenAndServe(":8080", mux)
-	if err != nil {
-		log.Fatal(err)
-	}
+	log.Fatal(http.ListenAndServe(":8080", mux))
 }
