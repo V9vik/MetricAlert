@@ -11,40 +11,40 @@ import (
 var storage = NewMemStorage()
 
 type MemStorageImpl interface {
-	UpdageGauge(name string, value float64)
-	UpdageCounter(name string, value int)
+	UpdateGauge(name string, value float64)
+	UpdateCounter(name string, value int64)
 	GetGauge(name string) float64
 	GetCounter(name string) int
 }
 type MemStorage struct {
 	mu      sync.Mutex
 	gauge   map[string]float64
-	counter map[string]int
+	counter map[string]int64
 }
 
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
 		gauge:   make(map[string]float64),
-		counter: make(map[string]int),
+		counter: make(map[string]int64),
 	}
 }
 
-func (s *MemStorage) UpdageGauge(name string, value float64) {
+func (s *MemStorage) UpdateGauge(name string, value float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gauge[name] = value
 }
-func (s *MemStorage) UpdageCounter(name string, value int) {
+func (s *MemStorage) UpdateCounter(name string, value int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.counter[name] = value
+	s.counter[name] += value
 }
 func (s *MemStorage) GetGauge(name string) float64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.gauge[name]
 }
-func (s *MemStorage) GetCounter(name string) int {
+func (s *MemStorage) GetCounter(name string) int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.counter[name]
@@ -55,7 +55,7 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	pathParts := strings.Split(r.URL.Path, "/")
 
-	if len(pathParts) < 5 {
+	if len(pathParts) != 4 {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
@@ -74,7 +74,7 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid value", http.StatusBadRequest)
 			return
 		}
-		storage.UpdageGauge(metricName, value)
+		storage.UpdateGauge(metricName, value)
 		w.WriteHeader(http.StatusOK)
 		return
 
@@ -83,11 +83,11 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, "Invalid value", http.StatusBadRequest)
 		}
-		storage.UpdageCounter(metricName, value)
+		storage.UpdateCounter(metricName, int64(value))
 		w.WriteHeader(http.StatusOK)
 		return
 	default:
-		http.Error(w, "Bad metric", http.StatusNotFound)
+		http.Error(w, "Bad metric", http.StatusBadRequest)
 		return
 	}
 }
