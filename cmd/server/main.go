@@ -33,7 +33,9 @@ func (s *MemStorage) UpdateCounter(name string, value int64) {
 	s.counters[name] += value
 }
 
-var storage = NewMemStorage()
+var (
+	storage = NewMemStorage()
+)
 
 func updateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
